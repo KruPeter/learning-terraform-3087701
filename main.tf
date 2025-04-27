@@ -14,14 +14,28 @@ data "aws_ami" "app_ami" {
   owners = ["979382823631"] # Bitnami
 }
 
-data "aws_vpc" "default" {
-  default = true
+
+module "web_vpc" {
+  source = "terraform-aws-modules/vpc/aws"
+
+  name = "dev-web-vpc"
+  cidr = "10.0.0.0/16"
+
+  azs            = ["ap-south-1a", "ap-south-1b"]
+  public_subnets = ["10.0.101.0/24", "10.0.102.0/24"]
+
+  tags = {
+    Terraform   = "true"
+    Environment = "dev"
+  }
 }
 
 
 resource "aws_instance" "web" {
   ami           = data.aws_ami.app_ami.id
   instance_type = var.instance_type
+
+  subnet_id = module.web_vpc.public_subnets[0]
 
   vpc_security_group_ids = [module.web_sg.security_group_id]
 
@@ -35,7 +49,7 @@ module "web_sg" {
   version = "5.3.0"
   name    = "web_sg"
 
-  vpc_id              = data.aws_vpc.default.id
+  vpc_id              = module.web_vpc.vpc_id
   ingress_rules       = ["http-80-tcp", "https-443-tcp"]
   ingress_cidr_blocks = ["0.0.0.0/0"]
 
