@@ -31,19 +31,6 @@ module "web_vpc" {
 }
 
 
-# resource "aws_instance" "web" {
-#   ami           = data.aws_ami.app_ami.id
-#   instance_type = var.instance_type
-
-#   subnet_id = module.web_vpc.public_subnets[0]
-
-#   vpc_security_group_ids = [module.web_sg.security_group_id]
-
-#   tags = {
-#     Name = "HelloWorld"
-#   }
-# }
-
 module "autoscaling" {
   source  = "terraform-aws-modules/autoscaling/aws"
   version = "8.2.0"
@@ -83,15 +70,6 @@ module "web_alb" {
         status_code = "HTTP_301"
       }
     }
-    # ex-https = {
-    #   port            = 443
-    #   protocol        = "HTTPS"
-    #   certificate_arn = "arn:aws:iam::123456789012:server-certificate/test_cert-123456789012"
-
-    #   forward = {
-    #     target_group_key = "ex-instance"
-    #   }
-    # }
   }
 
   target_groups = {
