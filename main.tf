@@ -31,18 +31,85 @@ module "web_vpc" {
 }
 
 
-resource "aws_instance" "web" {
-  ami           = data.aws_ami.app_ami.id
+# resource "aws_instance" "web" {
+#   ami           = data.aws_ami.app_ami.id
+#   instance_type = var.instance_type
+
+#   subnet_id = module.web_vpc.public_subnets[0]
+
+#   vpc_security_group_ids = [module.web_sg.security_group_id]
+
+#   tags = {
+#     Name = "HelloWorld"
+#   }
+# }
+
+module "autoscaling" {
+  source  = "terraform-aws-modules/autoscaling/aws"
+  version = "8.2.0"
+
+  name     = "web"
+  min_size = 1
+  max_size = 2
+
+  vpc_zone_identifier = module.web_vpc.public_subnets
+  security_groups     = [module.web_sg.security_group_id]
+
+  image_id      = data.aws_ami.app_ami.id
   instance_type = var.instance_type
+}
 
-  subnet_id = module.web_vpc.public_subnets[0]
+resource "aws_autoscaling_attachment" "asg_attachment" {
+  autoscaling_group_name = module.autoscaling.autoscaling_group_name
+  lb_target_group_arn    = module.web_alb.target_groups["ex-instance"].arn
+}
 
-  vpc_security_group_ids = [module.web_sg.security_group_id]
+
+module "web_alb" {
+  source = "terraform-aws-modules/alb/aws"
+
+  name            = "web-alb"
+  vpc_id          = module.web_vpc.vpc_id
+  subnets         = module.web_vpc.public_subnets
+  security_groups = [module.web_sg.security_group_id]
+
+  listeners = {
+    ex-http-https-redirect = {
+      port     = 80
+      protocol = "HTTP"
+      redirect = {
+        port        = "443"
+        protocol    = "HTTPS"
+        status_code = "HTTP_301"
+      }
+    }
+    # ex-https = {
+    #   port            = 443
+    #   protocol        = "HTTPS"
+    #   certificate_arn = "arn:aws:iam::123456789012:server-certificate/test_cert-123456789012"
+
+    #   forward = {
+    #     target_group_key = "ex-instance"
+    #   }
+    # }
+  }
+
+  target_groups = {
+    ex-instance = {
+      name_prefix       = "web-"
+      protocol          = "HTTP"
+      port              = 80
+      target_type       = "instance"
+      create_attachment = false
+    }
+  }
 
   tags = {
-    Name = "HelloWorld"
+    Environment = "dev"
+    Project     = "Example"
   }
 }
+
 
 module "web_sg" {
   source  = "terraform-aws-modules/security-group/aws"
