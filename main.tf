@@ -60,6 +60,8 @@ module "web_alb" {
   subnets         = module.web_vpc.public_subnets
   security_groups = [module.web_sg.security_group_id]
 
+  enable_deletion_protection = false
+
   listeners = {
     ex-http-https-redirect = {
       port     = 80
@@ -79,6 +81,18 @@ module "web_alb" {
       port              = 80
       target_type       = "instance"
       create_attachment = false
+
+      health_check = {
+        enabled             = true
+        path                = "/tomcat/"
+        port                = "traffic-port"
+        protocol            = "HTTP"
+        healthy_threshold   = 2
+        unhealthy_threshold = 2
+        timeout             = 5
+        interval            = 30
+        matcher             = "200"
+      }
     }
   }
 
