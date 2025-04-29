@@ -3,7 +3,7 @@ data "aws_ami" "app_ami" {
 
   filter {
     name   = "name"
-    values = ["bitnami-tomcat-*-x86_64-hvm-ebs-nami"]
+    values = [var.ami_filter.name]
   }
 
   filter {
@@ -11,22 +11,22 @@ data "aws_ami" "app_ami" {
     values = ["hvm"]
   }
 
-  owners = ["979382823631"] # Bitnami
+  owners = [var.ami_filter.owner]
 }
 
 
 module "web_vpc" {
   source = "terraform-aws-modules/vpc/aws"
 
-  name = "dev-web-vpc"
-  cidr = "10.0.0.0/16"
+  name = var.environment.name
+  cidr = "${var.environment.network_prefix}.0.0/16"
 
   azs            = ["ap-south-1a", "ap-south-1b"]
-  public_subnets = ["10.0.101.0/24", "10.0.102.0/24"]
+  public_subnets = ["${var.environment.network_prefix}.101.0/24", "${var.environment.network_prefix}.102.0/24"]
 
   tags = {
     Terraform   = "true"
-    Environment = "dev"
+    Environment = var.environment.name
   }
 }
 
@@ -35,9 +35,9 @@ module "autoscaling" {
   source  = "terraform-aws-modules/autoscaling/aws"
   version = "8.2.0"
 
-  name     = "web"
-  min_size = 1
-  max_size = 2
+  name     = "${var.environment.name}-web"
+  min_size = var.asg_min_size
+  max_size = var.asg_max_size
 
   vpc_zone_identifier = module.web_vpc.public_subnets
   security_groups     = [module.web_sg.security_group_id]
@@ -55,7 +55,7 @@ resource "aws_autoscaling_attachment" "asg_attachment" {
 module "web_alb" {
   source = "terraform-aws-modules/alb/aws"
 
-  name            = "web-alb"
+  name            = "${var.environment.name}-web-alb"
   vpc_id          = module.web_vpc.vpc_id
   subnets         = module.web_vpc.public_subnets
   security_groups = [module.web_sg.security_group_id]
@@ -63,13 +63,12 @@ module "web_alb" {
   enable_deletion_protection = false
 
   listeners = {
-    ex-http-https-redirect = {
+    ex-http = {
       port     = 80
       protocol = "HTTP"
-      redirect = {
-        port        = "443"
-        protocol    = "HTTPS"
-        status_code = "HTTP_301"
+
+      forward = {
+        target_group_key = "ex-instance"
       }
     }
   }
@@ -84,7 +83,7 @@ module "web_alb" {
 
       health_check = {
         enabled             = true
-        path                = "/tomcat/"
+        path                = "/"
         port                = "traffic-port"
         protocol            = "HTTP"
         healthy_threshold   = 2
@@ -97,7 +96,7 @@ module "web_alb" {
   }
 
   tags = {
-    Environment = "dev"
+    Environment = var.environment.name
     Project     = "Example"
   }
 }
@@ -106,7 +105,7 @@ module "web_alb" {
 module "web_sg" {
   source  = "terraform-aws-modules/security-group/aws"
   version = "5.3.0"
-  name    = "web_sg"
+  name    = "${var.environment.name}-web_sg"
 
   vpc_id              = module.web_vpc.vpc_id
   ingress_rules       = ["http-80-tcp", "https-443-tcp"]
